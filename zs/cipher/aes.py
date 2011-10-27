@@ -242,16 +242,21 @@ class AES(object):
         state = self.add_round_key(state, expanded_key, 0)
 
         # normal rounds:
-        for i in range(1, n_rounds - 1):
+        for i in range(1, n_rounds - 0):
+            print(i)
             state = self.sub_bytes(state)
+            print("sub bytes:     ", list(state))
             state = self.shift_rows(state)
+            print("shift rows:    ", list(state))
             state = self.mix_columns(state)
-            state = self.add_round_key(state, expanded_key, i)
+            print("mix columns:   ", list(state))
+            state = self.add_round_key(state, expanded_key, 16 * i)
+            print("add round key: ", list(state))
 
         # final round
         state = self.sub_bytes(state)
         state = self.shift_rows(state)
-        state = self.add_round_key(state, expanded_key, n_rounds - 1)
+        state = self.add_round_key(state, expanded_key, 16 * n_rounds)
 
         return state
 
@@ -386,12 +391,15 @@ def test_mix_columns():
 
 def test_encryption():
     a = AES()
-    print(a.encrypt(b"d" * 16, b"k" * 16))
-    print("encryption: \33[1mnot tested!\33[m")
+    print(a.encrypt(b"d" * 16, b"k" * 32))
+    print(b'\xa7i\xfdW\x98T@{v\xdd\x05Ye\x87I\xb7')
+    assert a.encrypt(b"d" * 16, b"k" * 32) == b'\xa7i\xfdW\x98T@{v\xdd\x05Ye\x87I\xb7'
+    print("encryption: all tests passed")
 
 
 if __name__ == '__main__':
     test_key_schedule()
     test_shift_rows()
     test_mix_columns()
+
     test_encryption()

@@ -259,10 +259,69 @@ class AES(object):
         return bytearray(self.sbox[i] for i in state)
 
     def shift_rows(self, state):
+        # transform our column-major order array back into a matrix:
+        matrix = [bytearray(4) for i in range(4)]
+        for i in range(4):
+            for j in range(4):
+                matrix[i][j] = state[(i * 4) + j]
+
+        # each byte of the nth row is shifted n to the left (0, 1, 2, 3):
+        matrix[1] = matrix[1][1:] + matrix[1][:1]
+        matrix[2] = matrix[2][2:] + matrix[2][:2]
+        matrix[3] = matrix[3][3:] + matrix[3][:3]
+
+        # transform the matrix back to column-major order:
+        state = bytearray(16)
+        for i in range(4):
+            for j in range(4):
+                state[(i + (j * 4))] = matrix[j][i]
+
         return state
 
+    @staticmethod
+    def galois_multiplication(a, b):
+        ''' remove this: stolen from slowaes '''
+        p = 0
+        for counter in range(8):
+            if b & 1:
+                p ^= a
+            hi_bit_set = a & 0x80
+            a <<= 1
+            a &= 0xFF
+            if hi_bit_set:
+                a ^= 0x1b
+            b >>= 1
+        return p
+
+
     def mix_columns(self, state):
+
+        def mix_column(column):
+            m = [2, 1, 1, 3]
+            
+            c = bytearray(i for i in column)
+            g = self.galois_multiplication
+
+            column[0] = (g(c[0], m[0]) ^ g(c[3], m[1]) ^
+                g(c[2], m[2]) ^ g(c[1], m[3]))
+            column[1] = (g(c[1], m[0]) ^ g(c[0], m[1]) ^
+                g(c[3], m[2]) ^ g(c[2], m[3]))
+            column[2] = (g(c[2], m[0]) ^ g(c[1], m[1]) ^
+                g(c[0], m[2]) ^ g(c[3], m[3]))
+            column[3] = (g(c[3], m[0]) ^ g(c[2], m[1]) ^
+                g(c[1], m[2]) ^ g(c[0], m[3]))
+
+            return column
+
+        for i in range(4):
+            # get a column out of our column-major order matrix:
+            column = state[i:i + 16:4]
+            # apply mix_column to that:
+            column = mix_column(column)
+            # re-insert the result into the matrix array:
+            state[i:i + 16:4] = column
         return state
+
 
 def test_key_schedule():
 
@@ -305,13 +364,34 @@ def test_key_schedule():
     print("key schedule: all tests passed")
 
 def test_shift_rows():
-
     a = AES()
-
     assert a.shift_rows(bytearray(range(1, 17))) == bytearray(
         [1, 2, 3, 4, 6, 7, 8, 5, 11, 12, 9, 10, 16, 13, 14, 15])
+    print("shift rows: all tests passed")
+
+
+def test_shift_rows():
+    a = AES()
+    assert a.shift_rows(bytearray(range(1, 17))) == bytearray(
+        [1, 2, 3, 4, 6, 7, 8, 5, 11, 12, 9, 10, 16, 13, 14, 15])
+    print("shift rows: all tests passed")
+
+
+def test_mix_columns():
+    a = AES()
+    assert a.mix_columns(bytearray(range(1, 17))) == bytearray(
+        [9, 10, 11, 12, 29, 30, 31, 16, 1, 2, 3, 36, 21, 22, 23, 40])
+    print("mix_columns: all tests passed")
+
+
+def test_encryption():
+    a = AES()
+    print(a.encrypt(b"d" * 16, b"k" * 16))
+    print("encryption: \33[1mnot tested!\33[m")
 
 
 if __name__ == '__main__':
     test_key_schedule()
     test_shift_rows()
+    test_mix_columns()
+    test_encryption()

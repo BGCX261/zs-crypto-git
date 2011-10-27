@@ -33,4 +33,4 @@ def check_padding(data, block_size):
 
 
 def test():
-    print("cbc: no test implemented")
+    print("pkcs7: no test implemented")

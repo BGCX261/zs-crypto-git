@@ -275,6 +275,7 @@ class AES(object):
         return state
 
     def sub_bytes(self, state, inverted=False):
+        # substitute values for sbox values
         if not inverted:
             return bytearray(self.sbox[i] for i in state)
         else:
@@ -307,6 +308,7 @@ class AES(object):
 
         return state
 
+    # lookup table for galois multiplication
     galois_multiplication = [[], [
             0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
             0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
@@ -817,8 +819,7 @@ def test_decrypt():
             assert a.decrypt(a.encrypt(d, k), k) == d
 
 
-if __name__ == '__main__':
-
+def test():
     print("testing encryption:")
     test_key_schedule()
     print("    key schedule: all tests passed")
@@ -831,4 +832,7 @@ if __name__ == '__main__':
     print("testing decryption:")
     test_decrypt()
     print("    decryption: all tests passed")
+
+if __name__ == '__main__':
+    test()
     print("all tests passed")

@@ -207,20 +207,62 @@ class AES(object):
         # get the expanded key from the rijndael key schedule:
         expanded_key = self.rijndael_key_schedule(key)
 
-
+        # aes operates on a 4 by 4 matrix, the state, which is
+        # stored as a flat array in column-major order, such that
+        # [[1, 2, 3], [4, 5, 6]] becomes [1, 4, 2, 5, 3, 6]:
         for i in range(4):
             for j in range(4):
                 block[(i + (j * 4))] = data[(i * 4) + j]
 
-        block = self.aes_main(block, expanded_key, n_rounds)
+        # initial round and start of the aes process:
+        block = self.main(block, expanded_key, n_rounds)
 
+        # here we turn the flat matrix back into a linear array
+        # from column-major order:
         for k in range(4):
             for l in range(4):
                 result[(k * 4) + l] = block[(k + (l * 4))]
+
+        # return the result as an immutable bytes object:
         return bytes(result)
 
-        
+    def get_round_key(self, expanded_key, kp):
+        round_key = bytearray(16)
+        for i in range(4):
+            for j in range(4):
+                round_key[j * 4 + i] = expanded_key[kp + i * 4 + j]
+        return round_key
 
+    def add_round_key(self, state, expanded_key, kp):
+        # xor the state with the round key
+        return self.xor(state, self.get_round_key(expanded_key, kp))
+
+    def main(self, state, expanded_key, n_rounds):
+        # initial round:
+        state = self.add_round_key(state, expanded_key, 0)
+
+        # normal rounds:
+        for i in range(1, n_rounds - 1):
+            state = self.sub_bytes(state)
+            state = self.shift_rows(state)
+            state = self.mix_columns(state)
+            state = self.add_round_key(state, expanded_key, i)
+
+        # final round
+        state = self.sub_bytes(state)
+        state = self.shift_rows(state)
+        state = self.add_round_key(state, expanded_key, n_rounds - 1)
+
+        return state
+
+    def sub_bytes(self, state):
+        return bytearray(self.sbox[i] for i in state)
+
+    def shift_rows(self, state):
+        return state
+
+    def mix_columns(self, state):
+        return state
 
 def test_key_schedule():
 
@@ -262,5 +304,14 @@ def test_key_schedule():
 
     print("key schedule: all tests passed")
 
+def test_shift_rows():
+
+    a = AES()
+
+    assert a.shift_rows(bytearray(range(1, 17))) == bytearray(
+        [1, 2, 3, 4, 6, 7, 8, 5, 11, 12, 9, 10, 16, 13, 14, 15])
+
+
 if __name__ == '__main__':
     test_key_schedule()
+    test_shift_rows()

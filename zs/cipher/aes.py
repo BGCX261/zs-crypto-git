@@ -87,26 +87,29 @@ class AES(object):
 
     @staticmethod
     def xor(a, b):
+        ''' bitwise xor on equal length bytearrays '''
         return bytearray(i ^ j for i, j in zip(a, b))
 
     @staticmethod
     def rotate(word):
+        ''' rotate a sequence of bytes eight bits to the left '''
         return word[1:] + word[:1]
-
-    def rijndael_key_schedule_core(self, key_word, rcon_iteration):
-
-        # rotate eight bits to the left:
-        key_word = self.rotate(key_word)
-        # apply the s-box to all 4 bytes:
-        key_word = bytearray(self.sbox[i] for i in key_word)
-        # xor the first byte with the rcon value for the current iteration
-        key_word[0] = key_word[0] ^ self.rcon[rcon_iteration]
-
-        return key_word
 
     def rijndael_key_schedule(self, key):
 
-        # define constants:
+        def rijndael_key_schedule_core(key_word, rcon_iteration):
+
+            # rotate eight bits to the left:
+            key_word = self.rotate(key_word)
+            # apply the s-box to all 4 bytes:
+            key_word = bytearray(self.sbox[i] for i in key_word)
+            # xor the first byte with the rcon value for the current iteration
+            key_word[0] = key_word[0] ^ self.rcon[rcon_iteration]
+
+            return key_word
+
+        # define constants for the length of the key
+        # and length of the expanded key, n and b:
         if len(key) == 16:
             n, b = 16, 176
         elif len(key) == 24:
@@ -118,51 +121,55 @@ class AES(object):
 
         # the expanded key has the length b, and it's 
         # first n bytes are the encryption key itself:
-        exkey = bytearray(b)
-        exkey[:len(key)] = key
+        expanded_key = bytearray(b)
+        expanded_key[:len(key)] = key
 
-        cs = len(key)
+        current_size = len(key)
         rcon_iteration = 1
 
-        while cs < b:
+        while current_size < b:
             # adding 4 bytes to the expanded key, starting
             # with the value of the previous 4 bytes in the
             # expanded key:
 
-            # exkey is the expanded key, cs is the current size of it
+            # expanded_key is the expanded key, cs is the current size of it
 
-            # t is the previous 4 bytes in the expanded key (1)
-            t = exkey[cs - 4:cs]
+            # t is the previous 4 bytes in the expanded key:
+            t = expanded_key[current_size - 4:current_size]  #1
             
             # perform the key schedule core on t:
-            t = self.rijndael_key_schedule_core(t, rcon_iteration)
+            t = rijndael_key_schedule_core(t, rcon_iteration)
             rcon_iteration += 1
             # exclusive-or t with the 4 bytes before the expanded key
-            # and make that the next 4 bytes of the expanded key (2):
-            exkey[cs:cs + 4] = self.xor(exkey[cs - n:cs - n + 4], t)
-            cs += 4
+            # and make that the next 4 bytes of the expanded key:
+            expanded_key[current_size:current_size + 4] = self.xor(
+                expanded_key[current_size - n:current_size - n + 4], t) #2
+            current_size += 4
 
             for i in range(3):
-                t = exkey[cs - 4:cs]  # 1
-                exkey[cs:cs + 4] = self.xor(exkey[cs - n:cs - n + 4], t)  # 2
-                cs += 4
+                t = expanded_key[current_size - 4:current_size]  #1
+                expanded_key[current_size:current_size + 4] = self.xor(
+                    expanded_key[current_size - n:current_size - n + 4], t)  #2
+                current_size += 4
 
             if n == 32:  # if we're generating a 256 bit key
-                t = exkey[cs - 4:cs]  # 1
+                t = expanded_key[current_size - 4:current_size]  #1
                 # run each of the 4 bytes through the rijdael s-box:
                 t = bytearray(self.sbox[i] for i in t)
-                exkey[cs:cs + 4] = self.xor(exkey[cs - n:cs - n + 4], t)  # 2
-                cs += 4
+                expanded_key[current_size:current_size + 4] = self.xor(
+                    expanded_key[current_size - n:current_size - n + 4], t)  #2
+                current_size += 4
 
             # if we're generating a 128 bit key, don't do the next step,
             # do it 2 times for a 192 bit key, 3 times for a 256 bit key:
             for i in range(0 if n == 16 else 2 if n == 24 else 3):
-                t = exkey[cs - 4:cs]  # 1
-                exkey[cs:cs + 4] = self.xor(exkey[cs - n:cs - n + 4], t)  # 2
-                cs += 4
+                t = expanded_key[current_size - 4:current_size]  #1
+                expanded_key[current_size:current_size + 4] = self.xor(
+                    expanded_key[current_size - n:current_size - n + 4], t)  #2
+                current_size += 4
 
         # because of the last step, the expanded key might be too long:
-        return exkey[:b]
+        return expanded_key[:b]
 
     def encrypt(self, data, key):
         # determine the number of rounds and raise
@@ -175,10 +182,24 @@ class AES(object):
             n_rounds = 14
         else:
             raise ValueError("key must be 16, 24 or 32 bytes long")
-        # empty bytearrays for our current block and the result.
-        # bytearrays are the mutable version of <type 'bytes'>.
+        # empty bytearrays for our current block and the result,
+        # bytearrays are the mutable version of <type 'bytes'>:
         block, result = bytearray(16), bytearray(16)
-        
+
+        # get the expanded key from the rijndael key schedule:
+        expanded_key = self.rijndael_key_schedule(key)
+
+
+        for i in range(4):
+            for j in range(4):
+                block[(i + (j * 4))] = data[(i * 4) + j]
+
+        block = self.aes_main(block, expanded_key, n_rounds)
+
+        for k in range(4):
+            for l in range(4):
+                result[(k * 4) + l] = block[(k + (l * 4))]
+        return bytes(result)
 
         
 
@@ -221,7 +242,7 @@ def test_key_schedule():
         b".hc\x16\x19\xc74\x9a\xce\x93\x02\x07Nv\xdf\x0c\x1f\xa6\xde\xcb\xe1"
         b"\x98%P\xff\xa80[\xa9\x98\x9dL\x87\xf0\xfeZ\x9e7\xca\xc0P\xa4\xc8")
 
-    print("all tests passed")
+    print("key schedule: all tests passed")
 
 if __name__ == '__main__':
     test_key_schedule()
